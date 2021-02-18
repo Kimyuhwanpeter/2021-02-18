@@ -46,15 +46,15 @@ flags.DEFINE_string("pre_checkpoint_path", "", "Saved checkpoint path (test)")
 
 flags.DEFINE_string("save_checkpoint", "", "Save checkpoint path (train)")
 
-flags.DEFINE_string("save_images", "", "Save sample images")
+flags.DEFINE_string("save_images", "C:/Users/Yuhwan/Pictures/test_sample", "Save sample images")
 
 
 FLAGS = flags.FLAGS
 FLAGS(sys.argv)
 
-ge_optim = tf.keras.optimizers.Adam(FLAGS.lr)
-se_optim = tf.keras.optimizers.Adam(FLAGS.lr)
-d_optim = tf.keras.optimizers.Adam(FLAGS.lr)
+ge_optim = tf.keras.optimizers.Adam(0.0002)
+se_optim = tf.keras.optimizers.Adam(0.000002)
+d_optim = tf.keras.optimizers.Adam(0.0002)
 
 def input_img_map(img_list, lab_list):
 
@@ -98,8 +98,8 @@ def cal_loss(input_images, style_images, noise_img, noise_img2, ge_model, se_mod
         n1_style_1, n2_style_2, n3_style_3 = se_model(noise_img2, True)    # age
 
         fake_img = ge_model([input_images, style_1, style_2, style_3], True)
-        cycle_fake_img = ge_model([fake_img, n1_style_1, n2_style_2, n3_style_3], True)
-        fake_n_img = ge_model([input_images, n_style_1, n_style_2, n_style_3], True)
+        cycle_fake_img = ge_model([fake_img, n1_style_1, n2_style_2, n3_style_3], False)
+        fake_n_img = ge_model([input_images, n_style_1, n_style_2, n_style_3], False)
 
         real_dis = dis_model(input_images, True)
         fake_dis = dis_model(fake_img, True)
@@ -108,7 +108,7 @@ def cal_loss(input_images, style_images, noise_img, noise_img2, ge_model, se_mod
         g_style_diver = tf.reduce_mean(tf.abs(fake_n_img - fake_img))
         g_cycle = tf.reduce_mean(tf.abs(input_images - cycle_fake_img))
         g_ad = tf.reduce_mean((fake_dis - tf.ones_like(fake_dis))**2)
-        g_loss = g_style_reconstruct + g_style_diver + g_cycle + g_ad
+        g_loss = g_style_reconstruct + g_cycle + g_ad
         
         d_loss = (tf.reduce_mean((real_dis - tf.ones_like(real_dis))**2) \
             + tf.reduce_mean((fake_dis - tf.zeros_like(fake_dis))**2)) / 2
@@ -175,7 +175,7 @@ def main():
 
             S = list(zip(style_img, style_lab))
             shuffle(S)
-            style_img, style_lab = zip(*T)
+            style_img, style_lab = zip(*S)
             style_img, style_lab = np.array(style_img), np.array(style_lab)
 
             mapping_input = tf.data.Dataset.from_tensor_slices((input_img, input_lab))
@@ -197,10 +197,23 @@ def main():
 
                 input_images, input_labels, labels_nom = next(input_iter)
                 style_images, style_labels, style_nom, noise_img, noise_img2 = next(style_iter)
-
+                #plt.imshow(style_images[0].numpy() * 0.5 + 0.5)
+                #plt.show()
                 g_loss, d_loss = cal_loss(input_images, style_images, noise_img, noise_img2, ge_model, se_model, dis_model)
 
-                print(g_loss, d_loss)
+                print("Epochs: {} [{}/{}] g_loss = {}, d_loss = {}".format(epoch, step + 1, train_idx, g_loss, d_loss))
+
+                if count % 100 == 0:
+                    style_1, style_2, style_3 = se_model(style_images, False)
+                    fake_img = ge_model([input_images, style_1, style_2, style_3], False)
+
+                    plt.imsave(FLAGS.save_images + "/fake_1_{}.jpg".format(count), fake_img[0].numpy() * 0.5 + 0.5)
+
+                    plt.imsave(FLAGS.save_images + "/input_1_{}.jpg".format(count), input_images[0].numpy() * 0.5 + 0.5)
+
+                    plt.imsave(FLAGS.save_images + "/style_1_{}.jpg".format(count), style_images[0].numpy() * 0.5 + 0.5)
+
+                count += 1
 
 
 if __name__ == "__main__":
